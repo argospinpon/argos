@@ -71,7 +71,13 @@ const COL = {noche:'#0E2A5C', azul:'#2E7CF6', cielo:'#EAF2FE', mandarina:'#FF8A1
 const BOLA_COLORES = [COL.azul, COL.blanco, COL.mandarina, COL.sol];
 const PALA = {w:14, h:100, margen:30};
 const BOLA_W = 70, BOLA_H = Math.round(70*307/320);
-const DIFIC = [ {vel:300, error:60, reaccion:.30}, {vel:430, error:34, reaccion:.18}, {vel:600, error:14, reaccion:.08} ];
+// Rival "humano": lee bien las pelotas lentas y coloca la devolución lejos de ti;
+// solo empieza a calcular mal cuando la pelota supera su velocidad de confort.
+const DIFIC = [
+  {vmax:430, acc:2700, reaccion:.20, umbral:480, errVel:.30},   // Fácil
+  {vmax:530, acc:3400, reaccion:.15, umbral:570, errVel:.27},   // Normal
+  {vmax:650, acc:4300, reaccion:.10, umbral:670, errVel:.24},   // Difícil
+];
 
 const cv = document.getElementById('c'), ctx = cv.getContext('2d');
 const pista = document.getElementById('pista');
@@ -84,7 +90,7 @@ const S = {
   marcador:[0,0], saca:0, temporizador:0,
   izq:{y:H/2, obj:null}, der:{y:H/2, obj:null},
   bola:{x:W/2, y:H/2, vx:0, vy:0, color:0, golpes:0},
-  ganador:null, mensaje:'', ia:{obj:H/2, t:0}
+  ganador:null, mensaje:'', ia:{obj:H/2, v:0, sigue:false, espera:0, sesgo:0}
 };
 
 // ---------- Cara de ARGOS (misma geometría que el GIF) ----------
@@ -207,22 +213,43 @@ function moverPala(pala, dt, arriba, abajo, vel=620){
   if(abajo)  { pala.y += vel*dt; pala.obj=null; }
   pala.y = Math.max(PALA.h/2, Math.min(H-PALA.h/2, pala.y));
 }
+const gauss = ()=>{ let u=0,v=0; while(!u) u=Math.random(); while(!v) v=Math.random(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); };
+function prediceY(b){
+  const t = (W-PALA.margen-PALA.w-BOLA_W/2 - b.x)/b.vx;
+  let y = b.y + b.vy*t;
+  const lo=BOLA_H/2, hi=H-BOLA_H/2, span=hi-lo;
+  y -= lo; y = ((y%(2*span))+2*span)%(2*span); if(y>span) y=2*span-y;
+  return y+lo;
+}
 function moverIA(dt){
-  const d = DIFIC[S.dif], b=S.bola, pala=S.der;
-  S.ia.t -= dt;
-  if(S.ia.t<=0){
-    S.ia.t = d.reaccion;
-    if(b.vx>0){
-      // predice dónde llegará rebotando en las paredes
-      let t = (W-PALA.margen-PALA.w-BOLA_W/2 - b.x)/b.vx, y = b.y + b.vy*t;
-      const lo=BOLA_H/2, hi=H-BOLA_H/2, span=hi-lo;
-      y -= lo; y = ((y%(2*span))+2*span)%(2*span); if(y>span) y=2*span-y; y+=lo;
-      S.ia.obj = y + (Math.random()*2-1)*d.error;
-    } else S.ia.obj = H/2 + (b.y-H/2)*.3;
+  const d = DIFIC[S.dif], b=S.bola, pala=S.der, ia=S.ia;
+  if(b.vx>0){
+    if(!ia.sigue){                      // la pelota viene: ve el golpe y tarda en reaccionar
+      ia.sigue = true;
+      ia.espera = d.reaccion*(0.8+0.5*Math.random());
+      const exceso = Math.max(0, Math.hypot(b.vx,b.vy)-d.umbral);   // solo falla si va rápida
+      ia.sesgo = gauss()*d.errVel*exceso;
+      // con tiempo de sobra, golpea con un lado de la pala para mandarla lejos de ti
+      const lado = S.izq.y < H/2 ? 1 : -1;
+      ia.apunta = exceso>0 ? 0 : lado*(12+Math.random()*20);
+    }
+    ia.espera -= dt;
+    if(ia.espera<=0){
+      const queda = Math.max(0, Math.min(1, (W-b.x)/W));       // corrige el cálculo al acercarse
+      ia.obj = prediceY(b) - (ia.apunta||0) + ia.sesgo*(0.6 + 0.4*queda);
+    }
+  } else {
+    ia.sigue = false;                     // la pelota se va: vuelve sin prisa hacia el centro
+    ia.obj = H/2 + (b.y-H/2)*0.35;
   }
-  const dy = S.ia.obj - pala.y, paso = d.vel*dt;
-  pala.y += Math.max(-paso, Math.min(paso, dy));
-  pala.y = Math.max(PALA.h/2, Math.min(H-PALA.h/2, pala.y));
+  // pala con inercia: acelera y frena, puede pasarse un poco
+  const relajado = b.vx<0 ? 0.6 : 1;
+  const deseada = Math.max(-d.vmax*relajado, Math.min(d.vmax*relajado, (ia.obj-pala.y)*9));
+  const dv = deseada-ia.v, maxDv = d.acc*dt;
+  ia.v += Math.max(-maxDv, Math.min(maxDv, dv));
+  pala.y += ia.v*dt;
+  if(pala.y<PALA.h/2){ pala.y=PALA.h/2; ia.v=0; }
+  if(pala.y>H-PALA.h/2){ pala.y=H-PALA.h/2; ia.v=0; }
 }
 
 function choquePala(b, pala, xCara, dir){
@@ -253,7 +280,7 @@ function actualiza(dt){
   moverPala(S.izq, dt, teclas.w||(S.modo===1&&teclas.arriba), teclas.s||(S.modo===1&&teclas.abajo));
   if(S.modo===2) moverPala(S.der, dt, teclas.arriba, teclas.abajo);
   else if(S.fase==='juego') moverIA(dt);
-  else { S.der.y = lerp(S.der.y, H/2, 1-Math.pow(.95, dt*60)); }
+  else { S.ia.sigue=false; S.ia.obj=H/2; S.der.y = lerp(S.der.y, H/2, 1-Math.pow(.97, dt*60)); S.ia.v=0; }
 
   if(S.fase==='saque' || S.fase==='punto'){
     S.temporizador -= dt;
