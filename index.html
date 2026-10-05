@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ARGOS Pong</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;800;900&display=swap">
+<style>
+/* Layout: barra de control arriba, pista 16:9 centrada que ocupa el resto, ayuda abajo.
+   Tema único y deliberado: la pantalla nocturna de ARGOS. */
+:root{
+  --noche:#0E2A5C; --noche-2:#0A2048; --azul:#2E7CF6; --cielo:#EAF2FE;
+  --mandarina:#FF8A1F; --sol:#FFD23F; --gris:#5B6B82; --linea:rgba(234,242,254,.14);
+  --f-ui:"Nunito",ui-rounded,"SF Pro Rounded",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--noche-2);color:var(--cielo);font-family:var(--f-ui);margin:0;
+  padding-inline:16px;padding-block:12px;box-sizing:border-box;display:flex;flex-direction:column;gap:12px;overflow:hidden}
+header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px}
+.marca{display:flex;align-items:center;gap:10px;font-weight:900;font-size:1.35rem;letter-spacing:.01em}
+.marca img{width:30px;height:auto}
+.controles{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.grupo{display:flex;background:rgba(234,242,254,.07);border-radius:999px;padding:3px}
+.grupo button,.icono{font:800 .85rem var(--f-ui);color:var(--cielo);background:none;border:0;
+  padding:7px 14px;border-radius:999px;cursor:pointer;letter-spacing:.01em}
+.grupo button[aria-pressed="true"]{background:var(--azul);color:#fff}
+.grupo button:hover:not([aria-pressed="true"]),.icono:hover{background:rgba(234,242,254,.1)}
+.icono{background:rgba(234,242,254,.07)}
+button:focus-visible{outline:2px solid var(--sol);outline-offset:2px}
+#dificultad[hidden]{display:none!important}
+.pista{flex:1;min-height:0;display:grid;place-items:center}
+canvas{display:block;border-radius:18px;background:var(--noche);touch-action:none;cursor:none;
+  box-shadow:0 0 0 1px var(--linea)}
+footer{display:flex;flex-wrap:wrap;justify-content:center;gap:6px 22px;font-weight:600;font-size:.82rem;color:rgba(234,242,254,.62)}
+kbd{font:800 .75rem var(--f-ui);background:rgba(234,242,254,.1);border-radius:6px;padding:2px 7px;color:var(--cielo)}
+@media (max-width:560px){.marca{font-size:1.1rem}.grupo button,.icono{padding:6px 10px;font-size:.78rem}}
+</style>
+</head>
+<body>
+
+
+<header>
+  <div class="marca"><img id="logoMarca" alt=""> ARGOS Pong</div>
+  <div class="controles">
+    <div class="grupo" role="group" aria-label="Modo de juego">
+      <button id="m1" aria-pressed="true">1 jugador</button>
+      <button id="m2" aria-pressed="false">2 jugadores</button>
+    </div>
+    <div class="grupo" id="dificultad" role="group" aria-label="Dificultad">
+      <button id="d0" aria-pressed="false">Fácil</button>
+      <button id="d1" aria-pressed="true">Normal</button>
+      <button id="d2" aria-pressed="false">Difícil</button>
+    </div>
+    <button class="icono" id="sonido" aria-pressed="true">Sonido: sí</button>
+    <button class="icono" id="pantalla">Pantalla completa</button>
+  </div>
+</header>
+<div class="pista" id="pista"><canvas id="c" aria-label="Pista de ping pong"></canvas></div>
+<footer id="ayuda"></footer>
+
+<script>
+const HEAD_SRC = "data:image/png;base64,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";
+document.getElementById('logoMarca').src = HEAD_SRC;
+
+// ---------- Constantes ----------
+const W = 960, H = 540, META = 7;
+const COL = {noche:'#0E2A5C', azul:'#2E7CF6', cielo:'#EAF2FE', mandarina:'#FF8A1F', sol:'#FFD23F', gris:'#5B6B82', blanco:'#FFFFFF'};
+const BOLA_COLORES = [COL.azul, COL.blanco, COL.mandarina, COL.sol];
+const PALA = {w:14, h:100, margen:30};
+const BOLA_W = 70, BOLA_H = Math.round(70*307/320);
+const DIFIC = [ {vel:300, error:60, reaccion:.30}, {vel:430, error:34, reaccion:.18}, {vel:600, error:14, reaccion:.08} ];
+
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+const pista = document.getElementById('pista');
+
+// ---------- Estado ----------
+const S = {
+  modo:1, dif:1, sonido:true,
+  fase:'inicio',           // inicio | saque | juego | punto | fin | pausa
+  faseAnterior:null,
+  marcador:[0,0], saca:0, temporizador:0,
+  izq:{y:H/2, obj:null}, der:{y:H/2, obj:null},
+  bola:{x:W/2, y:H/2, vx:0, vy:0, color:0, golpes:0},
+  ganador:null, mensaje:'', ia:{obj:H/2, t:0}
+};
+
+// ---------- Cara de ARGOS (misma geometría que el GIF) ----------
+const head = new Image(); head.src = HEAD_SRC;
+const FW = 320, FH = 307, SC = 320/2196;
+const P = (x,y)=>[(x-950)*SC, (y-1002)*SC];
+const off = document.createElement('canvas'); off.width = FW; off.height = FH;
+const oc = off.getContext('2d');
+const NEUTRA = {ap_i:1, ap_d:1, fe_i:0, fe_d:0, esc:1, mw:288, y:1940, d:105, t:118, ab:0, e:0, o:0};
+const GESTOS = {
+  contento:{mw:340, y:1910, d:170},
+  guino:{fe_d:1, mw:348, y:1900, d:180},
+  risa:{fe_i:1, fe_d:1, mw:328, y:1960, d:60, ab:1, e:180},
+  sorpresa:{esc:1.15, mw:105, y:2010, d:0, t:0, o:1},
+  picaro:{fe_i:1, mw:300, y:1930, d:140},
+  concentrado:{ap_i:.55, ap_d:.55, mw:200, y:1960, d:30},
+};
+const cara = {cur:{...NEUTRA}, gesto:null, hasta:0, parp:-1, sigParp:1.5, gx:0, gy:0, entorna:0};
+function gesto(nombre, seg){ cara.gesto = nombre; cara.hasta = reloj + seg; }
+const lerp=(a,b,t)=>a+(b-a)*t;
+const N_P = 28;
+function ojo(cx,cy,ap,fe,esc){
+  const r = 196*esc, w = lerp(r,170,fe), sup=[], inf=[];
+  for(let i=0;i<=N_P;i++){
+    const u=-1+2*i/N_P, x=cx+u*w, circ=Math.sqrt(Math.max(0,1-u*u));
+    const arco=cy+60-115*(1-u*u), semi=Math.max(r*ap,20)*circ;
+    sup.push(P(x, lerp(cy-semi, arco-45, fe))); inf.push(P(x, lerp(cy+semi, arco+45, fe)));
+  }
+  poli(sup.concat(inf.reverse()));
+  if(fe>.01){ const rr=45*fe*SC; for(const x of [cx-w,cx+w]){ const [px,py]=P(x,cy+60); circulo(px,py,rr);} }
+}
+function boca(p){
+  const sup=[], inf=[];
+  for(let i=0;i<=N_P;i++){
+    const u=-1+2*i/N_P, x=2048+u*p.mw, q=1-u*u, c=p.y+p.d*q, ci=p.o*p.mw*Math.sqrt(Math.max(0,q));
+    sup.push(P(x, c-p.t/2-p.ab*p.d*q-ci)); inf.push(P(x, c+p.t/2+p.ab*p.e*q+ci));
+  }
+  poli(sup.concat(inf.reverse()));
+  if(p.t>1){ const rr=p.t/2*SC; for(const x of [2048-p.mw,2048+p.mw]){ const [px,py]=P(x,p.y); circulo(px,py,rr);} }
+}
+function poli(pts){ oc.beginPath(); oc.moveTo(pts[0][0],pts[0][1]); for(const q of pts) oc.lineTo(q[0],q[1]); oc.closePath(); oc.fill(); }
+function circulo(x,y,r){ oc.beginPath(); oc.arc(x,y,r,0,Math.PI*2); oc.fill(); }
+
+function actualizaCara(dt){
+  const obj = {...NEUTRA, ...(cara.gesto && reloj<cara.hasta ? GESTOS[cara.gesto] : {})};
+  if(reloj>=cara.hasta) cara.gesto=null;
+  const k = 1-Math.pow(1-0.2, dt*60);
+  for(const key in obj) cara.cur[key] = lerp(cara.cur[key], obj[key], k);
+  // parpadeo
+  cara.sigParp -= dt;
+  if(cara.sigParp<=0 && cara.parp<0){ cara.parp=0; cara.sigParp = 1.8+Math.random()*3.2; }
+  if(cara.parp>=0){ cara.parp += dt; if(cara.parp>0.28) cara.parp=-1; }
+  cara.entorna = Math.max(0, cara.entorna - dt*4);
+  // mirada hacia donde va la bola
+  const b=S.bola, sp=Math.hypot(b.vx,b.vy)||1;
+  const tx = S.fase==='juego' ? 45*b.vx/sp*1.3 : 0, ty = S.fase==='juego' ? 40*b.vy/sp*1.3 : 0;
+  cara.gx = lerp(cara.gx, tx, k); cara.gy = lerp(cara.gy, ty, k);
+}
+const CURVA_P = t => t<0 ? 1 : 1 - 0.96*Math.sin(Math.PI*Math.min(1,t/0.28));
+function pintaCara(color){
+  const p=cara.cur;
+  let cierre = CURVA_P(cara.parp) * (1-0.5*Math.sin(Math.PI*Math.min(1,cara.entorna)));
+  oc.globalCompositeOperation='source-over'; oc.clearRect(0,0,FW,FH);
+  if(head.complete) oc.drawImage(head,0,0,FW,FH);
+  oc.globalCompositeOperation='destination-out'; oc.fillStyle='#000';
+  const at = 1-(p.esc-1)/0.15;
+  ojo(1603+cara.gx*at, 1600+cara.gy*at, p.ap_i*cierre, p.fe_i, p.esc);
+  ojo(2492+cara.gx*at, 1600+cara.gy*at, p.ap_d*cierre, p.fe_d, p.esc);
+  boca(p);
+  oc.globalCompositeOperation='source-in'; oc.fillStyle=color; oc.fillRect(0,0,FW,FH);
+  oc.globalCompositeOperation='source-over';
+}
+
+// ---------- Sonido ----------
+let ac=null;
+function pip(f, dur=.07, tipo='square', vol=.05){
+  if(!S.sonido) return;
+  try{
+    ac = ac || new (window.AudioContext||window.webkitAudioContext)();
+    const o=ac.createOscillator(), g=ac.createGain();
+    o.type=tipo; o.frequency.value=f; g.gain.value=vol;
+    g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime+dur);
+    o.connect(g).connect(ac.destination); o.start(); o.stop(ac.currentTime+dur);
+  }catch(e){}
+}
+
+// ---------- Juego ----------
+const nombres = ()=> S.modo===1 ? ['Tú','Máquina'] : ['Jugador 1','Jugador 2'];
+function nuevaPartida(){
+  S.marcador=[0,0]; S.ganador=null; S.saca=Math.random()<.5?0:1;
+  S.izq.y=S.der.y=H/2; S.bola.color=0;
+  prepararSaque();
+}
+function prepararSaque(){
+  const b=S.bola; b.x=W/2; b.y=H/2; b.vx=b.vy=0; b.golpes=0;
+  S.fase='saque'; S.temporizador=0.9;
+}
+function sacar(){
+  const b=S.bola, dir = S.saca===0 ? 1 : -1;
+  const ang = (Math.random()*.6-.3);
+  const v = 380;
+  b.vx = dir*v*Math.cos(ang); b.vy = v*Math.sin(ang);
+  S.fase='juego'; pip(520,.06,'triangle');
+}
+function punto(quien){
+  S.marcador[quien]++; S.saca = quien===0 ? 1 : 0;
+  pip(quien===0?660:220,.25,'triangle',.06);
+  if(S.marcador[quien]>=META){
+    S.fase='fin'; S.ganador=quien; gesto('risa', 999);
+    return;
+  }
+  S.fase='punto'; S.temporizador=1.3;
+  if(S.modo===1) gesto(quien===0?'sorpresa':'guino', 1.3);
+  else gesto('sorpresa', 1.3);
+}
+
+function moverPala(pala, dt, arriba, abajo, vel=620){
+  if(pala.obj!=null){ pala.y = lerp(pala.y, pala.obj, 1-Math.pow(1-.35, dt*60)); }
+  if(arriba) { pala.y -= vel*dt; pala.obj=null; }
+  if(abajo)  { pala.y += vel*dt; pala.obj=null; }
+  pala.y = Math.max(PALA.h/2, Math.min(H-PALA.h/2, pala.y));
+}
+function moverIA(dt){
+  const d = DIFIC[S.dif], b=S.bola, pala=S.der;
+  S.ia.t -= dt;
+  if(S.ia.t<=0){
+    S.ia.t = d.reaccion;
+    if(b.vx>0){
+      // predice dónde llegará rebotando en las paredes
+      let t = (W-PALA.margen-PALA.w-BOLA_W/2 - b.x)/b.vx, y = b.y + b.vy*t;
+      const lo=BOLA_H/2, hi=H-BOLA_H/2, span=hi-lo;
+      y -= lo; y = ((y%(2*span))+2*span)%(2*span); if(y>span) y=2*span-y; y+=lo;
+      S.ia.obj = y + (Math.random()*2-1)*d.error;
+    } else S.ia.obj = H/2 + (b.y-H/2)*.3;
+  }
+  const dy = S.ia.obj - pala.y, paso = d.vel*dt;
+  pala.y += Math.max(-paso, Math.min(paso, dy));
+  pala.y = Math.max(PALA.h/2, Math.min(H-PALA.h/2, pala.y));
+}
+
+function choquePala(b, pala, xCara, dir){
+  const top = pala.y-PALA.h/2, bot = pala.y+PALA.h/2;
+  const bTop = b.y-BOLA_H/2, bBot = b.y+BOLA_H/2*0.55; // la cola de la cara no cuenta
+  if(bBot<top || bTop>bot) return false;
+  const rel = Math.max(-1, Math.min(1, (b.y - pala.y)/(PALA.h/2+BOLA_H/2)));
+  const ang = rel * 0.95;
+  const v = Math.min(Math.hypot(b.vx,b.vy)*1.06, 980);
+  b.vx = dir*v*Math.cos(ang); b.vy = v*Math.sin(ang);
+  b.x = xCara + dir*BOLA_W/2;
+  b.golpes++; b.color = (b.color+1)%BOLA_COLORES.length;
+  cara.entorna = 1; if(Math.random()<.45) gesto(['contento','picaro','guino'][Math.floor(Math.random()*3)], .7);
+  pip(440+b.golpes*12,.06,'square');
+  return true;
+}
+
+const teclas = {};
+let reloj=0, ultimo=performance.now();
+function paso(ahora){
+  const dt = Math.min(.033, (ahora-ultimo)/1000); ultimo=ahora;
+  if(S.fase!=='pausa') { reloj += dt; actualiza(dt); }
+  actualizaCara(dt);
+  pinta();
+  requestAnimationFrame(paso);
+}
+function actualiza(dt){
+  moverPala(S.izq, dt, teclas.w||(S.modo===1&&teclas.arriba), teclas.s||(S.modo===1&&teclas.abajo));
+  if(S.modo===2) moverPala(S.der, dt, teclas.arriba, teclas.abajo);
+  else if(S.fase==='juego') moverIA(dt);
+  else { S.der.y = lerp(S.der.y, H/2, 1-Math.pow(.95, dt*60)); }
+
+  if(S.fase==='saque' || S.fase==='punto'){
+    S.temporizador -= dt;
+    if(S.fase==='punto' && S.temporizador<=0) prepararSaque();
+    else if(S.fase==='saque' && S.temporizador<=0) sacar();
+    return;
+  }
+  if(S.fase!=='juego') return;
+  const b=S.bola;
+  b.x += b.vx*dt; b.y += b.vy*dt;
+  if(b.y-BOLA_H/2<0){ b.y=BOLA_H/2; b.vy=Math.abs(b.vy); cara.parp=0; pip(300,.04,'sine'); }
+  if(b.y+BOLA_H/2>H){ b.y=H-BOLA_H/2; b.vy=-Math.abs(b.vy); cara.parp=0; pip(300,.04,'sine'); }
+  const xi = PALA.margen+PALA.w, xd = W-PALA.margen-PALA.w;
+  if(b.vx<0 && b.x-BOLA_W/2<=xi && b.x-BOLA_W/2>=xi-28) choquePala(b, S.izq, xi, 1);
+  if(b.vx>0 && b.x+BOLA_W/2>=xd && b.x+BOLA_W/2<=xd+28) choquePala(b, S.der, xd, -1);
+  if(b.x+BOLA_W/2<0) punto(1);
+  if(b.x-BOLA_W/2>W) punto(0);
+}
+
+// ---------- Dibujo ----------
+function texto(t, x, y, size, color, peso=900, alinear='center'){
+  ctx.font = `${peso} ${size}px Nunito, ui-rounded, system-ui, sans-serif`;
+  ctx.fillStyle=color; ctx.textAlign=alinear; ctx.textBaseline='middle'; ctx.fillText(t,x,y);
+}
+function rr(x,y,w,h,r){ ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x,y,w,h,r) : ctx.rect(x,y,w,h); ctx.fill(); }
+function pinta(){
+  ctx.fillStyle=COL.noche; ctx.fillRect(0,0,W,H);
+  // red central
+  ctx.fillStyle='rgba(234,242,254,.16)';
+  for(let y=14;y<H;y+=34) rr(W/2-3,y,6,18,3);
+  // marcador
+  const n=nombres();
+  texto(S.marcador[0], W/2-90, 64, 72, 'rgba(234,242,254,.85)');
+  texto(S.marcador[1], W/2+90, 64, 72, 'rgba(234,242,254,.85)');
+  texto(n[0].toUpperCase(), W/2-90, 112, 13, 'rgba(234,242,254,.45)', 800);
+  texto(n[1].toUpperCase(), W/2+90, 112, 13, 'rgba(234,242,254,.45)', 800);
+  // palas
+  ctx.fillStyle=COL.sol; rr(PALA.margen, S.izq.y-PALA.h/2, PALA.w, PALA.h, 7);
+  ctx.fillStyle=COL.mandarina; rr(W-PALA.margen-PALA.w, S.der.y-PALA.h/2, PALA.w, PALA.h, 7);
+  // bola = ARGOS
+  const b=S.bola;
+  pintaCara(BOLA_COLORES[b.color]);
+  ctx.drawImage(off, b.x-BOLA_W/2, b.y-BOLA_H/2, BOLA_W, BOLA_H);
+  // mensajes
+  const panel = (l1,l2)=>{
+    ctx.fillStyle='rgba(10,32,72,.78)'; rr(W/2-250, H/2+60, 500, 110, 20);
+    texto(l1, W/2, H/2+98, 30, COL.cielo);
+    if(l2) texto(l2, W/2, H/2+138, 16, 'rgba(234,242,254,.7)', 700);
+  };
+  const tactil = matchMedia('(pointer: coarse)').matches;
+  const accion = tactil ? 'Toca la pista' : 'Pulsa espacio o haz clic';
+  if(S.fase==='inicio') panel(S.modo===1?'Tú contra la máquina':'Dos jugadores', `${accion} para empezar · gana quien llegue a ${META}`);
+  if(S.fase==='pausa') panel('Pausa', `${accion} o pulsa P para seguir`);
+  if(S.fase==='punto'){ const q = S.saca===1?0:1; panel(S.modo===1 ? (q===0?'¡Punto para ti!':'Punto para la máquina') : `Punto para ${n[q]}`, `${S.marcador[0]} – ${S.marcador[1]}`); }
+  if(S.fase==='fin') panel(S.modo===1 ? (S.ganador===0?'¡Has ganado!':'Gana la máquina') : `¡Gana ${n[S.ganador]}!`, `${S.marcador[0]} – ${S.marcador[1]} · ${accion} para la revancha`);
+}
+
+// ---------- Tamaño ----------
+function ajusta(){
+  const r = pista.getBoundingClientRect();
+  let w = r.width, h = w*9/16;
+  if(h>r.height){ h=r.height; w=h*16/9; }
+  const dpr = Math.min(window.devicePixelRatio||1, 2);
+  cv.style.width=w+'px'; cv.style.height=h+'px';
+  cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+  ctx.setTransform(cv.width/W,0,0,cv.height/H,0,0);
+}
+new ResizeObserver(ajusta).observe(pista);
+
+// ---------- Controles ----------
+function accionPrincipal(){
+  if(S.fase==='inicio'||S.fase==='fin') nuevaPartida();
+  else if(S.fase==='pausa') S.fase=S.faseAnterior;
+}
+function pausa(){
+  if(S.fase==='pausa') S.fase=S.faseAnterior;
+  else if(['juego','saque','punto'].includes(S.fase)){ S.faseAnterior=S.fase; S.fase='pausa'; }
+}
+const MAPA = {ArrowUp:'arriba', ArrowDown:'abajo', KeyW:'w', KeyS:'s'};
+addEventListener('keydown', e=>{
+  if(MAPA[e.code]){ teclas[MAPA[e.code]]=true; e.preventDefault(); }
+  if(e.code==='Space'){ e.preventDefault(); accionPrincipal(); }
+  if(e.code==='KeyP'||e.code==='Escape') pausa();
+});
+addEventListener('keyup', e=>{ if(MAPA[e.code]) teclas[MAPA[e.code]]=false; });
+addEventListener('blur', ()=>{ for(const k in teclas) teclas[k]=false; });
+document.addEventListener('visibilitychange', ()=>{ if(document.hidden && S.fase!=='pausa') pausa(); });
+
+function yLogica(e){ const r=cv.getBoundingClientRect(); return {x:(e.clientX-r.left)/r.width*W, y:(e.clientY-r.top)/r.height*H}; }
+cv.addEventListener('pointermove', e=>{
+  const p=yLogica(e);
+  if(S.modo===1 || p.x<W/2) S.izq.obj=p.y; else S.der.obj=p.y;
+});
+cv.addEventListener('pointerdown', e=>{ cv.setPointerCapture?.(e.pointerId); const p=yLogica(e);
+  if(S.modo===1 || p.x<W/2) S.izq.obj=p.y; else S.der.obj=p.y;
+  accionPrincipal(); });
+
+function elegirModo(m){
+  S.modo=m; document.getElementById('m1').setAttribute('aria-pressed', m===1);
+  document.getElementById('m2').setAttribute('aria-pressed', m===2);
+  document.getElementById('dificultad').hidden = m!==1;
+  S.fase='inicio'; S.marcador=[0,0]; prepararReposo(); ayuda();
+}
+function prepararReposo(){ const b=S.bola; b.x=W/2; b.y=H/2-40; b.vx=b.vy=0; S.fase='inicio'; }
+function elegirDif(d){ S.dif=d; [0,1,2].forEach(i=>document.getElementById('d'+i).setAttribute('aria-pressed', i===d)); }
+document.getElementById('m1').onclick=()=>elegirModo(1);
+document.getElementById('m2').onclick=()=>elegirModo(2);
+[0,1,2].forEach(i=>document.getElementById('d'+i).onclick=()=>elegirDif(i));
+document.getElementById('sonido').onclick=e=>{ S.sonido=!S.sonido; e.currentTarget.setAttribute('aria-pressed',S.sonido); e.currentTarget.textContent='Sonido: '+(S.sonido?'sí':'no'); };
+document.getElementById('pantalla').onclick=()=>{
+  const el=document.documentElement;
+  if(document.fullscreenElement) document.exitFullscreen?.().catch(()=>{});
+  else el.requestFullscreen?.().catch(()=>{});
+};
+function ayuda(){
+  const f=document.getElementById('ayuda');
+  f.innerHTML = S.modo===1
+    ? '<span>Mueve tu pala amarilla con el ratón, el dedo o <kbd>W</kbd> <kbd>S</kbd> / <kbd>↑</kbd> <kbd>↓</kbd></span><span><kbd>Espacio</kbd> empezar · <kbd>P</kbd> pausa</span>'
+    : '<span>Amarilla: <kbd>W</kbd> <kbd>S</kbd> o mitad izquierda</span><span>Naranja: <kbd>↑</kbd> <kbd>↓</kbd> o mitad derecha</span><span><kbd>Espacio</kbd> empezar · <kbd>P</kbd> pausa</span>';
+}
+try{ const m=+localStorage.getItem('argosPongModo'); if(m===2) S.modo=2; }catch(e){}
+elegirModo(S.modo);
+const _elegir=elegirModo; 
+document.getElementById('m1').addEventListener('click',()=>{try{localStorage.setItem('argosPongModo','1')}catch(e){}});
+document.getElementById('m2').addEventListener('click',()=>{try{localStorage.setItem('argosPongModo','2')}catch(e){}});
+setInterval(()=>{ if(S.fase==='inicio' && !cara.gesto && Math.random()<.35) gesto(['contento','guino','picaro','risa'][Math.floor(Math.random()*4)], 1.1); }, 2200);
+ajusta();
+requestAnimationFrame(paso);
+</script>
+
+</body>
+</html>
