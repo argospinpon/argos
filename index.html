@@ -74,9 +74,9 @@ const BOLA_W = 70, BOLA_H = Math.round(70*307/320);
 // Rival "humano": lee bien las pelotas lentas y coloca la devolución lejos de ti;
 // solo empieza a calcular mal cuando la pelota supera su velocidad de confort.
 const DIFIC = [
-  {vmax:430, acc:2700, reaccion:.20, umbral:480, errVel:.30},   // Fácil
-  {vmax:530, acc:3400, reaccion:.15, umbral:570, errVel:.27},   // Normal
-  {vmax:650, acc:4300, reaccion:.10, umbral:670, errVel:.24},   // Difícil
+  {vmax:540, acc:3300, reaccion:.16, umbral:760, errVel:.26},   // Fácil
+  {vmax:640, acc:4000, reaccion:.12, umbral:820, errVel:.30},   // Normal
+  {vmax:760, acc:4800, reaccion:.08, umbral:870, errVel:.34},   // Difícil
 ];
 
 const cv = document.getElementById('c'), ctx = cv.getContext('2d');
